@@ -1,40 +1,64 @@
-# import gym
-# env = gym.make('MontezumaRevenge-ram-v0')
-# env.reset()
-# env.render()
-# import time
-# time.sleep(5)
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 import numpy as np
 import argparse
 import sys
+import math
 
 import gym
 from gym import wrappers, logger
 
-sys.path.append('../../python/kerasTools')
-
-# from makemodel import MakeModel
-
-# model = MakeModel.create_model()
-
 class Agent(object):
     def __init__(self, action_space):
         self.action_space = action_space
+        self.shortMemSize = 10
+        self.shortMem = np.zeros((self.shortMemSize, 210, 160, 3), dtype=np.float16)
+        self.shortMemIndex = 0
+        self.shortMemIsFull = False
+        self.novel = np.zeros((210, 160, 3), dtype=np.float16)
+
+        self.frameSkip = 10
+        self.frameCount = 0
 
     def act(self, observation, reward, done):
-        # print(observation.shape)
+        self.frameCount += 1
+        # print(self.noveltyMask(observation))
+        if self.frameCount % self.frameSkip == 0:
+            self.noveltyMask(observation)
+        self.pushMem(observation)
+        # print(observation)
         return self.action_space.sample()
 
+    def pushMem (self, state):
+        self.shortMem[self.shortMemIndex] = state
+        
+        self.shortMemIndex += 1
+        if self.shortMemIndex >= self.shortMemSize:
+            self.shortMemIndex = 0
+            self.shortMemIsFull = True
+
+    def noveltyMask (self, state):
+        if len(self.shortMem) == 0:
+            self.novel = np.zeros_like(state, dtype=np.float16)
+            return
+        # if not self.shortMemIsFull:
+        #     return np.sum( np.sqrt( np.absolute(self.shortMem[:self.shortMemIndex] - state) ), axis=2 ) / self.shortMemIndex
+        self.novel = np.sum( np.sqrt( np.absolute(self.shortMem - state) ), axis=2 ) / self.shortMemIndex
+
 if __name__ == '__main__':
+    
     parser = argparse.ArgumentParser(description=None)
-    parser.add_argument('env_id', nargs='?', default='MontezumaRevenge-ram-v0', help='Select the environment to run')
+    parser.add_argument('env_id', nargs='?', default='MontezumaRevenge-v0', help='Select the environment to run')
     args = parser.parse_args()
 
     # You can set the level to logger.DEBUG or logger.WARN if you
     # want to change the amount of output.
     # logger.set_level(logger.INFO)
 
+    print(args.env_id)
     env = gym.make(args.env_id)
     # print(env.unwrapped.get_action_meanings())
 
