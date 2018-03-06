@@ -4,7 +4,7 @@ import gym
 import numpy as np
 from collections import deque
 from keras.models import Sequential
-from keras.layers import Dense
+from keras.layers import Dense, Conv2D, MaxPooling2D, Flatten, Dropout
 from keras.optimizers import Adam
 
 EPISODES = 1000
@@ -30,6 +30,15 @@ class DQNAgent:
         model.add(Dense(self.action_size, activation='linear'))
         model.compile(loss='mse',
                       optimizer=Adam(lr=self.learning_rate))
+        
+        # model = Sequential()
+        # model.add(Conv2D(32, (3,3), activation='relu', input_shape=self.state_size))
+        # model.add(Conv2D(32, (3,3), activation='relu', input_shape=self.state_size))
+        # model.add(MaxPooling2D(pool_size=(2, 2)))
+        # model.add(Dropout(0.25))
+        # model.add(Flatten())
+        # model.add(Dense(self.action_size, activation='linear'))
+        # model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
         return model
 
     def remember(self, state, action, reward, next_state, done):
@@ -101,7 +110,7 @@ if __name__ == "__main__":
     batch_size = 32
 
     averages = []
-    for averageIter in range(10):
+    for averageIter in range(1):
         agent = DQNAgent(state_size, action_size)
         averages.append(run_set(agent, batch_size, env, 100))
     print(averages)
