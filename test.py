@@ -7,30 +7,83 @@ import numpy as np
 import argparse
 import sys
 import math
+import random
 
 import gym
 from gym import wrappers, logger
 
+from collections import deque
+from keras.models import Sequential
+from keras.layers import Dense, Conv2D, MaxPooling2D, Flatten, Dropout
+from keras.optimizers import Adam
+
 class Agent(object):
     def __init__(self, action_space):
+        self.state_shape = (210, 160, 3)
         self.action_space = action_space
+        self.memory = deque(maxlen=2000)
         self.shortMemSize = 10
         self.shortMem = np.zeros((self.shortMemSize, 210, 160, 3), dtype=np.float16)
         self.shortMemIndex = 0
         self.shortMemIsFull = False
-        self.novel = np.zeros((210, 160, 3), dtype=np.float16)
+        self.novel = np.zeros(self.state_shape, dtype=np.float16)
 
         self.frameSkip = 10
         self.frameCount = 0
 
+        self.gamma = 0.95    # discount rate
+        self.epsilon = 1.0
+        self.epsilon_min = 0.01
+        self.epsilon_decay = 0.995
+        self.learning_rate = 0.001
+
+        self.model = self._make_model()
+
+    def _make_model(self):
+        # Neural Net for Deep-Q learning Model
+        model = Sequential()
+        model.add(Conv2D(32, (3,3), activation='relu', input_shape=self.state_shape))
+        model.add(MaxPooling2D(pool_size=(2, 2)))
+        model.add(Conv2D(32, (3,3), activation='relu'))
+        model.add(Dropout(0.25))
+        model.add(Flatten())
+        # print(self.action_space.n)
+        model.add(Dense(self.action_space.n, activation='linear'))
+        model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
+        return model
+
+    def remember(self, state, action, reward, next_state, done):
+        self.memory.append((state, action, reward, next_state, done))
+
     def act(self, observation, reward, done):
-        self.frameCount += 1
+
+        # self.frameCount += 1
         # print(self.noveltyMask(observation))
-        if self.frameCount % self.frameSkip == 0:
-            self.noveltyMask(observation)
+        # if self.frameCount % self.frameSkip == 0:
+        #     self.noveltyMask(observation)
+
         self.pushMem(observation)
-        # print(observation)
-        return self.action_space.sample()
+        # print(observation.shape)
+
+        act_values = self.model.predict(observation)
+        # print(np.argmax(act_values[0]))
+        return np.argmax(act_values[0])  # returns action
+
+        # return self.action_space.sample()
+
+    def replay(self, batch_size):
+        # print("learning")
+        minibatch = random.sample(self.memory, batch_size)
+        for state, action, reward, next_state, done in minibatch:
+            target = reward
+            if not done:
+                target = (reward + self.gamma *
+                          np.amax(self.model.predict(next_state)[0]))
+            target_f = self.model.predict(state)
+            target_f[0][action] = target
+            self.model.fit(state, target_f, epochs=1, verbose=0)
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
 
     def pushMem (self, state):
         self.shortMem[self.shortMemIndex] = state
@@ -47,6 +100,12 @@ class Agent(object):
         # if not self.shortMemIsFull:
         #     return np.sum( np.sqrt( np.absolute(self.shortMem[:self.shortMemIndex] - state) ), axis=2 ) / self.shortMemIndex
         self.novel = np.sum( np.sqrt( np.absolute(self.shortMem - state) ), axis=2 ) / self.shortMemIndex
+    
+    def load(self, name):
+        self.model.load_weights(name)
+
+    def save(self, name):
+        self.model.save_weights(name)
 
 if __name__ == '__main__':
     
@@ -71,17 +130,29 @@ if __name__ == '__main__':
     env.seed(0)
     agent = Agent(env.action_space)
 
+    batch_size = 32
     episode_count = 100
     reward = 0
     done = False
 
     for i in range(episode_count):
         ob = env.reset()
+        ob = np.expand_dims(ob, axis=0)
+        time = 0
         while True:
+            time += 1
             action = agent.act(ob, reward, done)
-            ob, reward, done, _ = env.step(action)
+            new_ob, reward, done, _ = env.step(action)
+            new_ob = np.expand_dims(new_ob, axis=0)
+            agent.remember(ob, action, reward, new_ob, done)
+
+            ob = new_ob
             env.render()
-            if done:
+            if done or time >= 1000:
+                print("episode: {}/{}, time: {}, e: {:.3}"
+                      .format(i, episode_count, time, agent.epsilon))
+                if len(agent.memory) > batch_size:
+                    agent.replay(batch_size)
                 break
             # Note there's no env.render() here. But the environment still can open window and
             # render if asked by env.monitor: it calls env.render('rgb_array') to record video.

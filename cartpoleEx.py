@@ -83,6 +83,7 @@ def run_set(agent, batch_size, env, testRange, setNumber=None):
             next_state = np.reshape(next_state, [1, state_size])
             agent.remember(state, action, reward, next_state, done)
             state = next_state
+            env.render()
             if done:
                 if setNumber != None:
                     print("set: {}, episode: {}/{}, score: {}, e: {:.3}"
