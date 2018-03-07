@@ -22,11 +22,6 @@ class Agent(object):
         self.state_shape = (210, 160, 3)
         self.action_space = action_space
         self.memory = deque(maxlen=2000)
-        self.shortMemSize = 10
-        self.shortMem = np.zeros((self.shortMemSize, 210, 160, 3), dtype=np.float16)
-        self.shortMemIndex = 0
-        self.shortMemIsFull = False
-        self.novel = np.zeros(self.state_shape, dtype=np.float16)
 
         self.frameSkip = 10
         self.frameCount = 0
@@ -56,20 +51,12 @@ class Agent(object):
         self.memory.append((state, action, reward, next_state, done))
 
     def act(self, observation, reward, done):
-
-        # self.frameCount += 1
-        # print(self.noveltyMask(observation))
-        # if self.frameCount % self.frameSkip == 0:
-        #     self.noveltyMask(observation)
-
-        self.pushMem(observation)
-        # print(observation.shape)
+        if np.random.rand() <= self.epsilon:
+            return random.randrange(self.action_space.n)
 
         act_values = self.model.predict(observation)
         # print(np.argmax(act_values[0]))
-        return np.argmax(act_values[0])  # returns action
-
-        # return self.action_space.sample()
+        return np.argmax(act_values[0])
 
     def replay(self, batch_size):
         # print("learning")
@@ -84,22 +71,6 @@ class Agent(object):
             self.model.fit(state, target_f, epochs=1, verbose=0)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
-
-    def pushMem (self, state):
-        self.shortMem[self.shortMemIndex] = state
-        
-        self.shortMemIndex += 1
-        if self.shortMemIndex >= self.shortMemSize:
-            self.shortMemIndex = 0
-            self.shortMemIsFull = True
-
-    def noveltyMask (self, state):
-        if len(self.shortMem) == 0:
-            self.novel = np.zeros_like(state, dtype=np.float16)
-            return
-        # if not self.shortMemIsFull:
-        #     return np.sum( np.sqrt( np.absolute(self.shortMem[:self.shortMemIndex] - state) ), axis=2 ) / self.shortMemIndex
-        self.novel = np.sum( np.sqrt( np.absolute(self.shortMem - state) ), axis=2 ) / self.shortMemIndex
     
     def load(self, name):
         self.model.load_weights(name)
@@ -153,6 +124,7 @@ if __name__ == '__main__':
                       .format(i, episode_count, time, agent.epsilon))
                 if len(agent.memory) > batch_size:
                     agent.replay(batch_size)
+                agent.save("./save/montazuma-dqn.h5")
                 break
             # Note there's no env.render() here. But the environment still can open window and
             # render if asked by env.monitor: it calls env.render('rgb_array') to record video.

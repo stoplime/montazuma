@@ -27,7 +27,7 @@ class Agent(object):
         self.shortMem = np.zeros((self.shortMemSize, 210, 160, 3), dtype=np.float16)
         self.shortMemIndex = 0
         self.shortMemIsFull = False
-        self.novel = np.zeros(self.state_shape, dtype=np.float16)
+        self.novel = np.zeros((1, 210, 160, 3)), dtype=np.float16)
 
         self.frameSkip = 10
         self.frameCount = 0
@@ -57,30 +57,25 @@ class Agent(object):
         self.memory.append((state, action, reward, next_state, done))
 
     def act(self, observation, reward, done):
-
-        # self.frameCount += 1
+        if np.random.rand() <= self.epsilon:
+            return random.randrange(self.action_space.n)
         # print(not np.all(self.noveltyMask(observation, 32) == 0))
         self.noveltyMask(observation, 32)
-        # if self.frameCount % self.frameSkip == 0:
-        #     self.noveltyMask(observation)
-
-        self.pushMem(observation)
-        # print(observation.shape)
 
         act_values = self.model.predict(np.concatenate((observation, self.novel), axis=3))
         # print(np.argmax(act_values[0]))
-        return np.argmax(act_values[0])  # returns action
-
-        # return self.action_space.sample()
+        return np.argmax(act_values[0])
 
     def replay(self, batch_size):
-        # print("learning")
         minibatch = random.sample(self.memory, batch_size)
+        # if self.novel.shape[0] != 1:
+        #     self.novel = np.expand_dims(self.novel, axis=0)
         for state, action, reward, next_state, done in minibatch:
             target = reward
             if not done:
-                target = (reward + self.gamma *
-                          np.amax(self.model.predict(np.concatenate((next_state, self.novel), axis=3))[0]))
+                # print(self.novel.shape)
+                # print(next_state.shape)
+                target = (reward + self.gamma * np.amax(self.model.predict(np.concatenate((next_state, self.novel), axis=3))[0]))
             target_f = self.model.predict(np.concatenate((state, self.novel), axis=3))
             target_f[0][action] = target
             # print(state.shape)
@@ -89,31 +84,18 @@ class Agent(object):
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
-    def pushMem (self, state):
-        self.shortMem[self.shortMemIndex] = state
-        
-        self.shortMemIndex += 1
-        if self.shortMemIndex >= self.shortMemSize:
-            self.shortMemIndex = 0
-            self.shortMemIsFull = True
-
     def noveltyMask (self, state, batch_size, step=1):
-        if len(self.memory) > batch_size:
-            noveltySlice = islice(self.memory, len(self.memory)-batch_size, len(self.memory), step)
+        if len(self.memory) > batch_size * step:
+            noveltySlice = islice(self.memory, len(self.memory)-batch_size*step, len(self.memory), step)
             noveltySlice = list(zip(*noveltySlice))
             noveltySlice = np.array(noveltySlice[0])
-            # print(type(noveltySlice))
-            # print(not np.any(np.zeros((5,1)) == 0))
-            # print(noveltySlice.shape)
-
         else:
             self.novel = np.zeros_like(state, dtype=np.float16)
+            # print(self.novel.shape)
             return self.novel
 
-        # if not self.shortMemIsFull:
-        #     return np.sum( np.sqrt( np.absolute(self.shortMem[:self.shortMemIndex] - state) ), axis=2 ) / self.shortMemIndex
-
         self.novel = np.sum( np.sqrt( np.absolute(noveltySlice - state) ), axis=0 ) / batch_size
+        # print(self.novel.shape)
         return self.novel
     
     def load(self, name):
@@ -168,6 +150,7 @@ if __name__ == '__main__':
                       .format(i, episode_count, time, agent.epsilon))
                 if len(agent.memory) > batch_size:
                     agent.replay(batch_size)
+                agent.save("./save/montazuma-dqn-novelty.h5")
                 break
             # Note there's no env.render() here. But the environment still can open window and
             # render if asked by env.monitor: it calls env.render('rgb_array') to record video.
