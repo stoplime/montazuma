@@ -27,7 +27,7 @@ class Agent(object):
         self.shortMem = np.zeros((self.shortMemSize, 210, 160, 3), dtype=np.float16)
         self.shortMemIndex = 0
         self.shortMemIsFull = False
-        self.novel = np.zeros((1, 210, 160, 3)), dtype=np.float16)
+        self.novel = np.zeros((1, 210, 160, 3), dtype=np.float16)
 
         self.frameSkip = 10
         self.frameCount = 0
