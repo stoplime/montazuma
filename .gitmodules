@@ -1,0 +1,3 @@
+[submodule "disentangled_vae"]
+	path = disentangled_vae
+	url = https://github.com/stoplime/disentangled_vae.git
