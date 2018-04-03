@@ -100,6 +100,7 @@ if __name__ == '__main__':
     # env = wrappers.Monitor(env, directory=outdir, force=True)
     env.seed(0)
     agent = Agent(env.action_space)
+    agent.load("./save/montazuma-dqn.h5")
 
     batch_size = 32
     episode_count = 100
@@ -124,7 +125,7 @@ if __name__ == '__main__':
                       .format(i, episode_count, time, agent.epsilon))
                 if len(agent.memory) > batch_size:
                     agent.replay(batch_size)
-                agent.save("./save/montazuma-dqn.h5")
+                # agent.save("./save/montazuma-dqn.h5")
                 break
             # Note there's no env.render() here. But the environment still can open window and
             # render if asked by env.monitor: it calls env.render('rgb_array') to record video.
