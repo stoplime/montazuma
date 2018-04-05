@@ -8,6 +8,7 @@ import argparse
 import sys
 import math
 import random
+from model import autoencoder
 
 import gym
 from gym import wrappers, logger
@@ -26,49 +27,29 @@ class Agent(object):
         self.frameSkip = 10
         self.frameCount = 0
 
-        self.gamma = 0.95    # discount rate
-        self.epsilon = 1.0
-        self.epsilon_min = 0.01
-        self.epsilon_decay = 0.995
-        self.learning_rate = 0.001
-
-        self.model = self._make_model()
-
-    def _make_model(self):
-        # Neural Net for Deep-Q learning Model
-        model = Sequential()
-        model.add(Conv2D(32, (3,3), activation='relu', input_shape=self.state_shape))
-        model.add(MaxPooling2D(pool_size=(2, 2)))
-        model.add(Conv2D(32, (3,3), activation='relu'))
-        model.add(Dropout(0.25))
-        model.add(Flatten())
-        # print(self.action_space.n)
-        model.add(Dense(self.action_space.n, activation='linear'))
-        model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
-        return model
+        self.vae = autoencoder(self.state_shape)
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
 
     def act(self, observation, reward, done):
-        if np.random.rand() <= self.epsilon:
-            return random.randrange(self.action_space.n)
+        # if np.random.rand() <= self.epsilon:
+        return random.randrange(self.action_space.n)
 
-        act_values = self.model.predict(observation)
-        # print(np.argmax(act_values[0]))
-        return np.argmax(act_values[0])
+        # act_values = self.model.predict(observation)
+        # # print(np.argmax(act_values[0]))
+        # return np.argmax(act_values[0])
+
+    def train(self, batch_images):
+        self.vae.train_on_batch(batch_images)
+        
 
     def replay(self, batch_size):
         # print("learning")
         minibatch = random.sample(self.memory, batch_size)
+        batch_images = np.zeros((batch_size, 210, 160, 3))
         for state, action, reward, next_state, done in minibatch:
-            target = reward
-            if not done:
-                target = (reward + self.gamma *
-                          np.amax(self.model.predict(next_state)[0]))
-            target_f = self.model.predict(state)
-            target_f[0][action] = target
-            self.model.fit(state, target_f, epochs=1, verbose=0)
+            self.vae.train_on_batch(batch_images)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
     

@@ -5,7 +5,7 @@ from __future__ import print_function
 
 import sys
 import numpy as np
-import tensorflow as 
+import tensorflow as tf
 from tf.keras.layers import Conv2D, Conv2DTranspose, BatchNormalization
 from tf.keras.activations import relu
 
