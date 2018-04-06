@@ -47,9 +47,11 @@ class Agent(object):
     def replay(self, batch_size):
         # print("learning")
         minibatch = random.sample(self.memory, batch_size)
-        batch_images = np.zeros((batch_size, 210, 160, 3))
-        for state, action, reward, next_state, done in minibatch:
-            self.vae.train_on_batch(batch_images)
+
+        batch_images, _, _, _, _ = zip(*minibatch)
+        batch_images = np.array(batch_images)
+        
+        self.vae.train_on_batch(batch_images)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
     
