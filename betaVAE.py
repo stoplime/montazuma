@@ -8,10 +8,14 @@ import argparse
 import sys
 import math
 import random
-from model import autoencoder
 
 import gym
 from gym import wrappers, logger
+
+sys.path.append("BVAE-tf/bvae")
+
+from models import Darknet19Encoder, Darknet19Decoder
+from ae import AutoEncoder
 
 from collections import deque
 from keras.models import Sequential
@@ -21,16 +25,28 @@ from keras.optimizers import Adam
 class Agent(object):
     def __init__(self, action_space):
         self.state_shape = (210, 160, 3)
+        self.batchSize = 10
+        self.latentSize = 100
+
         self.action_space = action_space
         self.memory = deque(maxlen=2000)
 
         self.frameSkip = 10
         self.frameCount = 0
 
-        self.vae = autoencoder(self.state_shape)
+        encoder = Darknet19Encoder(self.state_shape, self.batchSize, self.latentSize, 'bvae')
+        decoder = Darknet19Decoder(self.state_shape, self.batchSize, self.latentSize)
+        self.vae = AutoEncoder(encoder, decoder)
+        self.vae.ae.compile(optimizer='adam', loss='mean_absolute_error')
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
+
+    def processImage(self, state):
+        return np.reshape(np.float32(state), (128, 128, 3))/255 - 0.5
+
+    def unprocessImage(self, state):
+        return np.reshape(np.uint8((state+0.5)*255), self.state_shape)
 
     def act(self, observation, reward, done):
         # if np.random.rand() <= self.epsilon:
@@ -41,8 +57,16 @@ class Agent(object):
         # return np.argmax(act_values[0])
 
     def train(self, batch_images):
-        self.vae.train_on_batch(batch_images)
-        
+        self.vae.ae.fit(batch_images, batch_images,
+                    epochs=1,
+                    batch_size=self.batchSize)
+    
+    def get_latent(self, state):
+        return self.vae.encoder.predict(self.processImage(state))
+
+    def get_predict(self, state):
+        pred = self.vae.ae.predict(self.processImage(state))
+        return self.unprocessImage(pred)
 
     def replay(self, batch_size):
         # print("learning")
@@ -51,7 +75,7 @@ class Agent(object):
         batch_images, _, _, _, _ = zip(*minibatch)
         batch_images = np.array(batch_images)
         
-        self.vae.train_on_batch(batch_images)
+        self.train(batch_images)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
     
