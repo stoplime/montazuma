@@ -1,3 +1,6 @@
 [submodule "disentangled_vae"]
 	path = disentangled_vae
 	url = https://github.com/stoplime/disentangled_vae.git
+[submodule "BVAE-tf"]
+	path = BVAE-tf
+	url = https://github.com/shadySource/BVAE-tf.git
