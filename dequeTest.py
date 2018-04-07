@@ -22,7 +22,7 @@ def test():
 
     _, subbatch, _ = zip(*batch)
     subbatch = np.array(subbatch)
-    print(subbatch)
+    print(subbatch.shape)
 
 if __name__ == "__main__":
     test()

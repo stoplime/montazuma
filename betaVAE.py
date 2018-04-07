@@ -22,9 +22,12 @@ from keras.models import Sequential
 from keras.layers import Dense, Conv2D, MaxPooling2D, Flatten, Dropout
 from keras.optimizers import Adam
 
+import cv2
+
 class Agent(object):
     def __init__(self, action_space):
         self.state_shape = (210, 160, 3)
+        self.model_shape = (128, 128, 3)
         self.batchSize = 10
         self.latentSize = 100
 
@@ -34,19 +37,23 @@ class Agent(object):
         self.frameSkip = 10
         self.frameCount = 0
 
-        encoder = Darknet19Encoder(self.state_shape, self.batchSize, self.latentSize, 'bvae')
-        decoder = Darknet19Decoder(self.state_shape, self.batchSize, self.latentSize)
+        encoder = Darknet19Encoder(self.model_shape, self.batchSize, self.latentSize, 'bvae')
+        decoder = Darknet19Decoder(self.model_shape, self.batchSize, self.latentSize)
         self.vae = AutoEncoder(encoder, decoder)
         self.vae.ae.compile(optimizer='adam', loss='mean_absolute_error')
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
 
-    def processImage(self, state):
-        return np.reshape(np.float32(state), (128, 128, 3))/255 - 0.5
+    def processImage(self, state, batchsize=1):
+        batch = np.reshape(np.float32(state), ([batchsize]+list(self.state_shape)))/255 - 0.5
+        cv2.resize(batch, self.model_shape, batch, interpolation=cv2.INTER_LINEAR)
+        return batch
 
     def unprocessImage(self, state):
-        return np.reshape(np.uint8((state+0.5)*255), self.state_shape)
+        batch = np.reshape(np.uint8((state+0.5)*255), self.model_shape)
+        cv2.resize(batch, self.state_shape, batch, interpolation=cv2.INTER_LINEAR)
+        return batch
 
     def act(self, observation, reward, done):
         # if np.random.rand() <= self.epsilon:
@@ -57,6 +64,8 @@ class Agent(object):
         # return np.argmax(act_values[0])
 
     def train(self, batch_images):
+        batch_images = self.processImage(batch_images, self.batchSize)
+
         self.vae.ae.fit(batch_images, batch_images,
                     epochs=1,
                     batch_size=self.batchSize)
@@ -68,22 +77,24 @@ class Agent(object):
         pred = self.vae.ae.predict(self.processImage(state))
         return self.unprocessImage(pred)
 
-    def replay(self, batch_size):
+    def replay(self):
         # print("learning")
-        minibatch = random.sample(self.memory, batch_size)
+        minibatch = random.sample(self.memory, self.batchSize)
 
         batch_images, _, _, _, _ = zip(*minibatch)
         batch_images = np.array(batch_images)
         
         self.train(batch_images)
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
     
     def load(self, name):
-        self.model.load_weights(name)
+        # TODO: Implement this
+        # self.model.load_weights(name)
+        pass
 
     def save(self, name):
-        self.model.save_weights(name)
+        # TODO: Implement this
+        # self.model.save_weights(name)
+        pass
 
 if __name__ == '__main__':
     
@@ -109,7 +120,6 @@ if __name__ == '__main__':
     agent = Agent(env.action_space)
     agent.load("./save/montazuma-dqn.h5")
 
-    batch_size = 32
     episode_count = 100
     reward = 0
     done = False
@@ -127,11 +137,11 @@ if __name__ == '__main__':
 
             ob = new_ob
             env.render()
-            if done or time >= 1000:
-                print("episode: {}/{}, time: {}, e: {:.3}"
-                      .format(i, episode_count, time, agent.epsilon))
-                if len(agent.memory) > batch_size:
-                    agent.replay(batch_size)
+            if done or time >= 100:
+                print("episode: {}/{}, time: {}"
+                      .format(i, episode_count, time))
+                if len(agent.memory) > agent.batchSize:
+                    agent.replay()
                 # agent.save("./save/montazuma-dqn.h5")
                 break
             # Note there's no env.render() here. But the environment still can open window and
