@@ -37,8 +37,8 @@ class Agent(object):
         self.frameSkip = 10
         self.frameCount = 0
 
-        encoder = Darknet19Encoder(self.model_shape, self.batchSize, self.latentSize, 'bvae')
-        decoder = Darknet19Decoder(self.model_shape, self.batchSize, self.latentSize)
+        encoder = Darknet19Encoder(self.state_shape, self.batchSize, self.latentSize, 'bvae')
+        decoder = Darknet19Decoder(self.state_shape, self.batchSize, self.latentSize)
         self.vae = AutoEncoder(encoder, decoder)
         self.vae.ae.compile(optimizer='adam', loss='mean_absolute_error')
 
@@ -47,13 +47,13 @@ class Agent(object):
 
     def processImage(self, state, batchsize=1):
         batch = np.reshape(np.float32(state), ([batchsize]+list(self.state_shape)))/255 - 0.5
-        cv2.resize(batch, self.model_shape, batch, interpolation=cv2.INTER_LINEAR)
         return batch
+        # return cv2.resize(batch, self.model_shape[:2], interpolation=cv2.INTER_LINEAR)
 
     def unprocessImage(self, state):
         batch = np.reshape(np.uint8((state+0.5)*255), self.model_shape)
-        cv2.resize(batch, self.state_shape, batch, interpolation=cv2.INTER_LINEAR)
         return batch
+        # return cv2.resize(batch, self.state_shape[:2], interpolation=cv2.INTER_LINEAR)
 
     def act(self, observation, reward, done):
         # if np.random.rand() <= self.epsilon:
