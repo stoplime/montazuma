@@ -12,6 +12,10 @@ import random
 import gym
 from gym import wrappers, logger
 
+import tensorflow as tf
+
+from PIL import Image
+
 sys.path.append("BVAE-tf/bvae")
 
 from models import Darknet19Encoder, Darknet19Decoder
@@ -96,6 +100,13 @@ class Agent(object):
         # self.model.save_weights(name)
         pass
 
+def convertImage(image):
+    uint8Image = np.array(image, dtype=np.uint8)
+    pilImage = Image.fromarray(uint8Image)
+    resizedImage = pilImage.resize((256, 256))
+    numpyImage = np.array(resizedImage, dtype=np.float16)
+    return numpyImage
+
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description=None)
@@ -120,19 +131,25 @@ if __name__ == '__main__':
     agent = Agent(env.action_space)
     agent.load("./save/montazuma-dqn.h5")
 
+    # writer = tf.summary.FileWriter('log')
+    # writer.add_graph(tf.get_default_graph())
+
     episode_count = 100
     reward = 0
     done = False
 
     for i in range(episode_count):
         ob = env.reset()
+        ob = convertImage(ob)
         ob = np.expand_dims(ob, axis=0)
         time = 0
         while True:
             time += 1
             action = agent.act(ob, reward, done)
             new_ob, reward, done, _ = env.step(action)
+            new_ob = convertImage(new_ob)
             new_ob = np.expand_dims(new_ob, axis=0)
+
             agent.remember(ob, action, reward, new_ob, done)
 
             ob = new_ob
