@@ -31,7 +31,7 @@ import cv2
 class Agent(object):
     def __init__(self, action_space):
         self.state_shape = (210, 160, 3)
-        self.model_shape = (128, 128, 3)
+        self.model_shape = (256, 256, 3)
         self.batchSize = 10
         self.latentSize = 100
 
@@ -41,8 +41,8 @@ class Agent(object):
         self.frameSkip = 10
         self.frameCount = 0
 
-        encoder = Darknet19Encoder(self.state_shape, self.batchSize, self.latentSize, 'bvae')
-        decoder = Darknet19Decoder(self.state_shape, self.batchSize, self.latentSize)
+        encoder = Darknet19Encoder(self.model_shape, self.batchSize, self.latentSize, 'bvae')
+        decoder = Darknet19Decoder(self.model_shape, self.batchSize, self.latentSize)
         self.vae = AutoEncoder(encoder, decoder)
         self.vae.ae.compile(optimizer='adam', loss='mean_absolute_error')
 
@@ -50,7 +50,7 @@ class Agent(object):
         self.memory.append((state, action, reward, next_state, done))
 
     def processImage(self, state, batchsize=1):
-        batch = np.reshape(np.float32(state), ([batchsize]+list(self.state_shape)))/255 - 0.5
+        batch = np.reshape(np.float32(state), ([batchsize]+list(self.model_shape)))/255 - 0.5
         return batch
         # return cv2.resize(batch, self.model_shape[:2], interpolation=cv2.INTER_LINEAR)
 
@@ -86,7 +86,7 @@ class Agent(object):
         minibatch = random.sample(self.memory, self.batchSize)
 
         batch_images, _, _, _, _ = zip(*minibatch)
-        batch_images = np.array(batch_images)
+        batch_images = np.array(np.squeeze(batch_images, axis=1))
         
         self.train(batch_images)
     
