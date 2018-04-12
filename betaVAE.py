@@ -21,6 +21,7 @@ sys.path.append("BVAE-tf/bvae")
 from models import Darknet19Encoder, Darknet19Decoder
 from ae import AutoEncoder
 
+import itertools
 from collections import deque
 from keras.models import Sequential
 from keras.layers import Dense, Conv2D, MaxPooling2D, Flatten, Dropout
@@ -83,7 +84,8 @@ class Agent(object):
 
     def replay(self):
         # print("learning")
-        minibatch = random.sample(self.memory, self.batchSize)
+        # minibatch = random.sample(self.memory, self.batchSize)
+        minibatch = itertools.islice(self.memory, self.batchSize)
 
         batch_images, _, _, _, _ = zip(*minibatch)
         batch_images = np.array(np.squeeze(batch_images, axis=1))
@@ -151,10 +153,12 @@ if __name__ == '__main__':
             new_ob = np.expand_dims(new_ob, axis=0)
 
             agent.remember(ob, action, reward, new_ob, done)
+            # if len(agent.memory) > agent.batchSize:
+            #     agent.replay()
 
             ob = new_ob
             env.render()
-            if done or time >= 100:
+            if done or time >= 1000:
                 print("episode: {}/{}, time: {}"
                       .format(i, episode_count, time))
                 if len(agent.memory) > agent.batchSize:
