@@ -20,6 +20,10 @@ class Visualizer(object):
 
         self.Masks = np.zeros((numCompare,) + imageShape, dtype=np.float32)
 
+    def DisplayMask(self):
+        # TODO: convert mask from float to uint8 to display 0 to 255
+        pass
+
     def AddImage(self, image, compareNum):
         proccessedImage = self.ProcessImage(image)
         mask = self.FeatureMaskDetect(image)

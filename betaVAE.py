@@ -51,13 +51,15 @@ class Agent(object):
         self.memory.append((state, action, reward, next_state, done))
 
     def processImage(self, state, batchsize=1):
-        batch = np.reshape(np.float32(state), ([batchsize]+list(self.model_shape)))/255 - 0.5
+        batch = np.float32(state)/255 - 0.5
         return batch
         # return cv2.resize(batch, self.model_shape[:2], interpolation=cv2.INTER_LINEAR)
 
-    def unprocessImage(self, state):
-        batch = np.reshape(np.uint8((state+0.5)*255), self.model_shape)
-        return batch
+    def unprocessImage(self, state, batchsize=1):
+        state[state > 0.5] = 0.5 # clean it up a bit
+        state[state < -0.5] = -0.5
+        _state = np.uint8((state+0.5)*255)
+        return np.squeeze(_state)
         # return cv2.resize(batch, self.state_shape[:2], interpolation=cv2.INTER_LINEAR)
 
     def act(self, observation, reward, done):
@@ -79,8 +81,9 @@ class Agent(object):
         return self.vae.encoder.predict(self.processImage(state))
 
     def get_predict(self, state):
-        pred = self.vae.ae.predict(self.processImage(state))
-        return self.unprocessImage(pred)
+        tileImage = self.processImage(state)
+        pred = self.vae.ae.predict(np.squeeze(np.array([tileImage]*self.batchSize)))
+        return self.unprocessImage(pred, self.batchSize)[0]
 
     def replay(self):
         # print("learning")
@@ -153,14 +156,24 @@ if __name__ == '__main__':
             new_ob = np.expand_dims(new_ob, axis=0)
 
             agent.remember(ob, action, reward, new_ob, done)
-            # if len(agent.memory) > agent.batchSize:
-            #     agent.replay()
+
+            if len(agent.memory) > agent.batchSize and time % 10 == 0:
+                print("episode: {}/{}, time: {}"
+                      .format(i+1, episode_count, time))
+                agent.replay()
+            if time == 500:
+                # pred = Image.fromarray(agent.get_predict(ob))
+                # pred.show()
+                cvPred = cv2.cvtColor(agent.get_predict(ob), cv2.COLOR_RGB2BGR)
+                cv2.imwrite("save/images/sample_{}.png".format(str(i).zfill(3)), cvPred)
+                cv2.imshow("image", cvPred)
+                cv2.waitKey(1)
 
             ob = new_ob
             env.render()
             if done or time >= 1000:
                 print("episode: {}/{}, time: {}"
-                      .format(i, episode_count, time))
+                      .format(i+1, episode_count, time))
                 if len(agent.memory) > agent.batchSize:
                     agent.replay()
                 # agent.save("./save/montazuma-dqn.h5")
