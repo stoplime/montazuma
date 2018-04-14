@@ -6,6 +6,7 @@ from __future__ import print_function
 import numpy as np
 import argparse
 import sys
+import os
 import math
 import random
 
@@ -18,7 +19,7 @@ from PIL import Image
 
 sys.path.append("BVAE-tf/bvae")
 
-from models import Darknet19Encoder, Darknet19Decoder
+from models import Darknet19Encoder, Darknet19Decoder, ResDarknet19Encoder, ResDarknet19Decoder
 from ae import AutoEncoder
 
 import itertools
@@ -33,13 +34,13 @@ class Agent(object):
     def __init__(self, action_space):
         self.state_shape = (210, 160, 3)
         self.model_shape = (128, 128, 3)
-        self.batchSize = 64
+        self.batchSize = 32
         self.latentSize = 100
 
         self.action_space = action_space
         self.memory = deque(maxlen=2000)
 
-        encoder = Darknet19Encoder(self.model_shape, self.batchSize, self.latentSize, None)
+        encoder = Darknet19Encoder(self.model_shape, self.batchSize, self.latentSize, 'bvae', )
         decoder = Darknet19Decoder(self.model_shape, self.batchSize, self.latentSize)
         self.vae = AutoEncoder(encoder, decoder)
         self.vae.ae.compile(optimizer='adam', loss='mean_absolute_error')
@@ -115,12 +116,15 @@ if __name__ == '__main__':
     parser.add_argument('env_id', nargs='?', default='MontezumaRevenge-v0', help='Select the environment to run')
     args = parser.parse_args()
 
-    folder = "./save/images_3"
+    folder = os.path.join("save", "images_6")
     # model - number - modelType - betaValue - inputShape
-    saveFile = "model-3-bVAE-0-128px"
+    saveFile = "DarkNet19-6-bvae-100-128px"
 
     load = False
     save = True
+
+    if not os.path.exists(folder):
+        os.makedirs(folder)
 
     # You can set the level to logger.DEBUG or logger.WARN if you
     # want to change the amount of output.
@@ -139,7 +143,7 @@ if __name__ == '__main__':
     env.seed(0)
     agent = Agent(env.action_space)
     if load:
-        agent.load(sys.path.join(folder, saveFile+".h5"))
+        agent.load(os.path.join(folder, saveFile+".h5"))
 
     # writer = tf.summary.FileWriter('log')
     # writer.add_graph(tf.get_default_graph())
@@ -155,6 +159,7 @@ if __name__ == '__main__':
         ob = np.expand_dims(ob, axis=0)
         time = 0
         sampleTime = random.randint(0, maxTime)
+        hasSampled = False
         while True:
             time += 1
             action = agent.act(ob, reward, done)
@@ -169,15 +174,16 @@ if __name__ == '__main__':
                       .format(i+1, episode_count, time))
                 agent.replay()
             
-            if done or time == sampleTime:
+            if (done or time == sampleTime) and hasSampled == False:
                 # pred = Image.fromarray(agent.get_predict(ob))
                 # pred.show()
                 pred = agent.get_predict(ob)
                 visualize = np.concatenate((np.squeeze(ob), pred), axis=1)
                 cvPred = cv2.cvtColor(visualize, cv2.COLOR_RGB2BGR)
-                cv2.imwrite(sys.path.join(folder, "sample_{}.png".format(str(i).zfill(3))), cvPred)
+                cv2.imwrite(os.path.join(folder, "sample_{}.png".format(str(i).zfill(3))), cvPred)
                 cv2.imshow("image", cvPred)
                 cv2.waitKey(1)
+                hasSampled = True
 
             ob = new_ob
             env.render()
@@ -187,11 +193,8 @@ if __name__ == '__main__':
                 if len(agent.memory) > agent.batchSize:
                     agent.replay()
                 if save:
-                    agent.save(sys.path.join(folder, saveFile+".h5"))
+                    agent.save(os.path.join(folder, saveFile+".h5"))
                 break
-            # Note there's no env.render() here. But the environment still can open window and
-            # render if asked by env.monitor: it calls env.render('rgb_array') to record video.
-            # Video is not recorded every episode, see capped_cubic_video_schedule for details.
 
     # Close the env and write monitor result info to disk
     env.close()

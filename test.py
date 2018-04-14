@@ -51,12 +51,12 @@ class Agent(object):
         self.memory.append((state, action, reward, next_state, done))
 
     def act(self, observation, reward, done):
-        if np.random.rand() <= self.epsilon:
-            return random.randrange(self.action_space.n)
+        # if np.random.rand() <= self.epsilon:
+        return random.randrange(self.action_space.n)
 
-        act_values = self.model.predict(observation)
+        # act_values = self.model.predict(observation)
         # print(np.argmax(act_values[0]))
-        return np.argmax(act_values[0])
+        # return np.argmax(act_values[0])
 
     def replay(self, batch_size):
         # print("learning")
