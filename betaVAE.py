@@ -34,13 +34,13 @@ class Agent(object):
     def __init__(self, action_space):
         self.state_shape = (210, 160, 3)
         self.model_shape = (128, 128, 3)
-        self.batchSize = 32
-        self.latentSize = 100
+        self.batchSize = 64
+        self.latentSize = 1000
 
         self.action_space = action_space
         self.memory = deque(maxlen=2000)
 
-        encoder = Darknet19Encoder(self.model_shape, self.batchSize, self.latentSize, 'bvae', )
+        encoder = Darknet19Encoder(self.model_shape, self.batchSize, self.latentSize, None)
         decoder = Darknet19Decoder(self.model_shape, self.batchSize, self.latentSize)
         self.vae = AutoEncoder(encoder, decoder)
         self.vae.ae.compile(optimizer='adam', loss='mean_absolute_error')
@@ -116,11 +116,12 @@ if __name__ == '__main__':
     parser.add_argument('env_id', nargs='?', default='MontezumaRevenge-v0', help='Select the environment to run')
     args = parser.parse_args()
 
-    folder = os.path.join("save", "images_6")
-    # model - number - modelType - betaValue - inputShape
-    saveFile = "DarkNet19-6-bvae-100-128px"
+    folder = os.path.join("save", "images_7")
+    # model - number - modelType - betaValue - latentSize - inputShape - episodes
+    loadFile = os.path.join("save", "images_7", "DarkNet19-7-None-0-1000l-128px-10000e")
+    saveFile = os.path.join(folder, "DarkNet19-7-None-0-1000l-128px-10000e")
 
-    load = False
+    load = True
     save = True
 
     if not os.path.exists(folder):
@@ -143,12 +144,12 @@ if __name__ == '__main__':
     env.seed(0)
     agent = Agent(env.action_space)
     if load:
-        agent.load(os.path.join(folder, saveFile+".h5"))
+        agent.load(loadFile+".h5")
 
     # writer = tf.summary.FileWriter('log')
     # writer.add_graph(tf.get_default_graph())
 
-    episode_count = 1000
+    episode_count = 10000
     maxTime = 1000
     reward = 0
     done = False
@@ -180,7 +181,7 @@ if __name__ == '__main__':
                 pred = agent.get_predict(ob)
                 visualize = np.concatenate((np.squeeze(ob), pred), axis=1)
                 cvPred = cv2.cvtColor(visualize, cv2.COLOR_RGB2BGR)
-                cv2.imwrite(os.path.join(folder, "sample_{}.png".format(str(i).zfill(3))), cvPred)
+                cv2.imwrite(os.path.join(folder, "sample_{}.png".format(str(i).zfill(4))), cvPred)
                 cv2.imshow("image", cvPred)
                 cv2.waitKey(1)
                 hasSampled = True
@@ -193,7 +194,7 @@ if __name__ == '__main__':
                 if len(agent.memory) > agent.batchSize:
                     agent.replay()
                 if save:
-                    agent.save(os.path.join(folder, saveFile+".h5"))
+                    agent.save(saveFile+".h5")
                 break
 
     # Close the env and write monitor result info to disk
