@@ -19,7 +19,7 @@ from PIL import Image
 
 sys.path.append("BVAE-tf/bvae")
 
-from models import Darknet19Encoder, Darknet19Decoder, ResDarknet19Encoder, ResDarknet19Decoder
+from models import Darknet19Encoder, Darknet19Decoder
 from ae import AutoEncoder
 
 import itertools
@@ -34,7 +34,7 @@ class Agent(object):
     def __init__(self, action_space):
         self.state_shape = (210, 160, 3)
         self.model_shape = (128, 128, 3)
-        self.batchSize = 32
+        self.batchSize = 16
         self.latentSize = 100
 
         self.action_space = action_space
