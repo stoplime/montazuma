@@ -9,6 +9,7 @@ import sys
 import math
 import random
 
+from PIL import Image
 import cv2
 
 class RegionProposal(object):
@@ -19,12 +20,31 @@ class RegionProposal(object):
     def GetMask(self, inputImages):
         imageCompare = inputImages[0]
         averageMask = np.zeros_like(imageCompare)
-        for i in range(1, inputImages.Shape[0]):
-            diffMask = imageCompare - inputImages[i]
-            averageMask = (averageMask * (i-1) + diffMask)/i
+        for i in range(1, inputImages.shape[0]):
+            diffMask = np.float32(imageCompare - inputImages[i])
+            averageMask = averageMask + diffMask
+        averageMask = np.clip(averageMask, 0, 1)
+        averageMask = np.uint8(averageMask * 255)
+        averageMask = np.clip(averageMask, 0, 255)
+        averageMask = cv2.cvtColor(averageMask, cv2.COLOR_RGB2GRAY)
+        # cv2.imshow('mask', averageMask)
+        # cv2.waitKey(0)
         return averageMask
 
     def BlobDetect(self, mask):
-        
+        _, contours, _ = cv2.findContours(mask.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_TC89_L1)
+        print("contours", len(contours))
+        centres = []
+        for i in range(len(contours)):
+            moments = cv2.moments(contours[i])
+            if moments['m00'] != 0:
+                centres.append((int(moments['m10']/moments['m00']), int(moments['m01']/moments['m00'])))
+                cv2.circle(mask, centres[-1], 1, (0, 0, 0), -1)
+        print("centres", len(centres))
+        cv2.imshow('contours', mask)
+        cv2.waitKey(0)
+
+    def test(self, inputImages):
+        self.BlobDetect(self.GetMask(inputImages))
 
 

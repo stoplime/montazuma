@@ -22,6 +22,8 @@ sys.path.append("BVAE-tf/bvae")
 from models import Darknet19Encoder, Darknet19Decoder
 from ae import AutoEncoder
 
+from region import RegionProposal
+
 import itertools
 from collections import deque
 from keras.models import Sequential
@@ -34,8 +36,8 @@ class Agent(object):
     def __init__(self, action_space):
         self.state_shape = (210, 160, 3)
         self.model_shape = (128, 128, 3)
-        self.batchSize = 64
-        self.latentSize = 1000
+        self.batchSize = 8
+        self.latentSize = 100
 
         self.action_space = action_space
         self.memory = deque(maxlen=2000)
@@ -46,7 +48,7 @@ class Agent(object):
         self.vae.ae.compile(optimizer='adam', loss='mean_absolute_error')
 
     def remember(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
+        self.memory.appendleft((state, action, reward, next_state, done))
 
     def processImage(self, state):
         batch = np.float32(state)/255 - 0.5
@@ -90,6 +92,11 @@ class Agent(object):
 
         batch_images, _, _, _, _ = zip(*minibatch)
         batch_images = np.array(np.squeeze(batch_images, axis=1))
+
+        # cv2.imshow("batch", batch_images[0])
+        # cv2.waitKey(1)
+        # region = RegionProposal()
+        # region.test(batch_images)
         
         self.train(batch_images)
     
@@ -121,8 +128,8 @@ if __name__ == '__main__':
     loadFile = os.path.join("save", "images_7", "DarkNet19-7-None-0-1000l-128px-10000e")
     saveFile = os.path.join(folder, "DarkNet19-7-None-0-1000l-128px-10000e")
 
-    load = True
-    save = True
+    load = False
+    save = False
 
     if not os.path.exists(folder):
         os.makedirs(folder)
