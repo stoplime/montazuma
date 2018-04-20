@@ -106,7 +106,7 @@ class Agent(object):
     def replay(self, regions=False):
         # print("learning")
         # minibatch = random.sample(self.memory, self.batchSize)
-        minibatch = itertools.islice(self.memory, self.batchSize, step)
+        minibatch = itertools.islice(self.memory, self.batchSize)
 
         batch_images, _, _, _, _ = zip(*minibatch)
         batch_images = np.array(np.squeeze(batch_images, axis=1))
@@ -151,8 +151,8 @@ if __name__ == '__main__':
     loadFile = os.path.join("save", "images_8", "DarkNet19-8-None-0-1000l-128px-10000e-batchFix")
     saveFile = os.path.join(folder, "DarkNet19-8-None-0-1000l-128px-10000e-batchFix")
 
-    load = True
-    save = True
+    load = False
+    save = False
 
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -201,7 +201,7 @@ if __name__ == '__main__':
 
             agent.remember(ob, action, reward, new_ob, done)
 
-            if len(agent.memory) > agent.batchSize and time % (agent.batchSize*step) == 0:
+            if len(agent.memory) > agent.batchSize and time % agent.batchSize == 0:
                 print("episode: {}/{}, time: {}"
                       .format(i+1, episode_count, time))
                 agent.replay(usingRegions)
