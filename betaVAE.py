@@ -35,7 +35,7 @@ import cv2
 class Agent(object):
     def __init__(self, action_space):
         self.state_shape = (210, 160, 3)
-        self.model_shape = (128, 128, 3)
+        self.model_shape = (32, 32, 3)
         self.batchSize = 8
         self.latentSize = 100
 
@@ -46,6 +46,8 @@ class Agent(object):
         decoder = Darknet19Decoder(self.model_shape, self.batchSize, self.latentSize)
         self.vae = AutoEncoder(encoder, decoder)
         self.vae.ae.compile(optimizer='adam', loss='mean_absolute_error')
+
+        self.regionLibrary = RegionProposal(input_size=(128, 128, 3), region_size=(32, 32), verbose=1)
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.appendleft((state, action, reward, next_state, done))
@@ -80,12 +82,28 @@ class Agent(object):
     def get_latent(self, state):
         return self.vae.encoder.predict(self.processImage(state))
 
-    def get_predict(self, state):
+    def get_predict(self, state, preState=None):
         tileImage = self.processImage(state)
-        pred = self.vae.ae.predict(np.squeeze(np.array([tileImage]*self.batchSize)), batch_size=self.batchSize)
-        return self.unprocessImage(pred)[0]
+        if preState is not None:
+            preImage = self.processImage(preState)
+            inputBatch = np.squeeze(np.array([tileImage, preImage]))
 
-    def replay(self):
+            regions = self.regionLibrary.MotionRegions(inputBatch)
+            regions = np.reshape(regions, (-1,)+regions.shape[-3:])
+            while regions.shape[0] % self.batchSize != 0:
+                print(regions.shape)
+                regions = np.concatenate((regions, regions[0:1]), axis=0)
+            print("get_pred.regions.shape", regions.shape)
+            
+            pred = self.vae.ae.predict(regions, batch_size=self.batchSize)
+            return regions, self.unprocessImage(pred)
+        else:
+            inputImage = np.squeeze(np.array([tileImage]*self.batchSize))
+
+            pred = self.vae.ae.predict(inputImage, batch_size=self.batchSize)
+            return state, self.unprocessImage(pred)[0]
+
+    def replay(self, regions=False):
         # print("learning")
         # minibatch = random.sample(self.memory, self.batchSize)
         minibatch = itertools.islice(self.memory, self.batchSize)
@@ -95,10 +113,15 @@ class Agent(object):
 
         cv2.imshow("batch", cv2.cvtColor(np.concatenate((*batch_images[:],), axis=1), cv2.COLOR_RGB2BGR))
         cv2.waitKey(1)
-        # region = RegionProposal()
-        # region.test(batch_images)
+        if regions:
+            regions = self.regionLibrary.MotionRegions(batch_images)
+
+            # print("batch shape", (-1,)+regions.shape[-3:])
+            regions = np.reshape(regions, (-1,)+regions.shape[-3:])
         
-        self.train(batch_images)
+            self.train(regions)
+        else:
+            self.train(batch_images)
     
     def load(self, name):
         # TODO: Implement this
@@ -160,6 +183,7 @@ if __name__ == '__main__':
     maxTime = 1000
     reward = 0
     done = False
+    usingRegions = True
 
     for i in range(episode_count):
         ob = env.reset()
@@ -180,13 +204,20 @@ if __name__ == '__main__':
             if len(agent.memory) > agent.batchSize and time % agent.batchSize == 0:
                 print("episode: {}/{}, time: {}"
                       .format(i+1, episode_count, time))
-                agent.replay()
+                agent.replay(usingRegions)
             
             if (done or time == sampleTime) and hasSampled == False:
                 # pred = Image.fromarray(agent.get_predict(ob))
                 # pred.show()
-                pred = agent.get_predict(ob)
-                visualize = np.concatenate((np.squeeze(ob), pred), axis=1)
+                if usingRegions:
+                    state, pred = agent.get_predict(new_ob, ob)
+                    stateVisualize = np.concatenate((*state,), axis=1)
+                    visualize = np.concatenate((*pred,), axis=1)
+                    visualize = np.concatenate((stateVisualize, visualize), axis=0)
+                else:
+                    state, pred = agent.get_predict(ob)
+                    visualize = np.concatenate((np.squeeze(state), pred), axis=1)
+                
                 cvPred = cv2.cvtColor(visualize, cv2.COLOR_RGB2BGR)
                 cv2.imwrite(os.path.join(folder, "sample_{}.png".format(str(i).zfill(4))), cvPred)
                 cv2.imshow("image", cvPred)
@@ -199,7 +230,7 @@ if __name__ == '__main__':
                 print("episode: {}/{}, time: {}"
                       .format(i+1, episode_count, time))
                 if len(agent.memory) > agent.batchSize:
-                    agent.replay()
+                    agent.replay(usingRegions)
                 if save:
                     agent.save(saveFile+".h5")
                 break

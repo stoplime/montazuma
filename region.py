@@ -13,9 +13,10 @@ from PIL import Image
 import cv2
 
 class RegionProposal(object):
-    def __init__(self, input_size=(128, 128, 3), region_size=(64, 64)):
+    def __init__(self, input_size=(128, 128, 3), region_size=(32, 32), verbose=0):
         self.input_size = input_size
         self.region_size = region_size
+        self.verbose = verbose
 
     def GetMask(self, inputImages):
         imageCompare = inputImages[0]
@@ -32,42 +33,60 @@ class RegionProposal(object):
 
     def BlobDetect(self, mask):
         _, contours, _ = cv2.findContours(mask.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_TC89_L1)
-        print("contours", len(contours))
+        if self.verbose == 1:
+            print("contours", len(contours))
         centres = []
         for i in range(len(contours)):
             moments = cv2.moments(contours[i])
             if moments['m00'] != 0:
                 centres.append((int(moments['m10']/moments['m00']), int(moments['m01']/moments['m00'])))
                 cv2.circle(mask, centres[-1], 1, (0, 0, 0), -1)
-        print("centres", len(centres))
-        cv2.imshow('contours', mask)
-        cv2.waitKey(0)
+        if self.verbose == 1:
+            print("centres", len(centres))
+            cv2.imshow('contours', mask)
+            cv2.waitKey(1)
+        return centres
 
-    def ClampRegion(self, image, centers):
-        print("image.shape[-1:]", image.shape[-1:])
-        print("(len(centers),) + self.region_size + image.shape[-1:]", (len(centers),) + self.region_size + image.shape[-1:])
-        region = np.zeros((len(centers),) + self.region_size + image.shape[-1:])
+    def ClampRegion(self, images, centers):
+        if self.verbose == 1:
+            print("regions Shape", (images.shape[0],) + (len(centers),) + self.region_size + images.shape[-1:])
+        
+        regions = np.zeros((images.shape[0],) + (len(centers),) + self.region_size + images.shape[-1:], dtype=np.uint8)
+
         for i, center in enumerate(centers):
-            xMin, xMax = center[0] - self.region_size[0], center[0] + self.region_size[0]
-            yMin, yMax = center[1] - self.region_size[1], center[1] + self.region_size[1]
+            halfRegion = [int(self.region_size[0]/2), int(self.region_size[1]/2)]
+            xMin, xMax = center[0] - halfRegion[0], center[0] + halfRegion[0]
+            yMin, yMax = center[1] - halfRegion[1], center[1] + halfRegion[1]
             # clamp the min and max
             if xMin < 0:
                 xMax -= xMin
                 xMin = 0
-            if xMax > image.shape[0]:
-                xMin -= xMax-image.shape[0]
-                xMax = image.shape[0]
+            if xMax > images.shape[1]:
+                xMin -= xMax-images.shape[1]
+                xMax = images.shape[1]
             if yMin < 0:
                 yMax -= yMin
                 yMin = 0
-            if yMax > image.shape[1]:
-                yMin -= yMax-image.shape[1]
-                yMax = image.shape[1]
+            if yMax > images.shape[2]:
+                yMin -= yMax-images.shape[2]
+                yMax = images.shape[2]
             # crop the region
-            region[i] = image[xMin:xMax, yMin:yMax]
-        return region
+            regions[:, i] = images[:, yMin:yMax, xMin:xMax, :]
+        return regions
 
-    def test(self, inputImages):
-        self.BlobDetect(self.GetMask(inputImages))
+    def MotionRegions(self, inputImages):
+        centers = self.BlobDetect(self.GetMask(inputImages.copy()))
+        regions = self.ClampRegion(inputImages, centers)
+        
+        if self.verbose == 1:
+            print("regions.shape", regions.shape)
+            regionsSpan = np.concatenate((*regions[:],), axis=2)
+            print("regionsSpan.shape", regionsSpan.shape)
+            regionsSpan = np.concatenate((*regionsSpan[:],), axis=0)
+            print("regionsSpan.shape", regionsSpan.shape)
+            cv2.imshow("regions", cv2.cvtColor(regionsSpan, cv2.COLOR_RGB2BGR))
+            cv2.waitKey(1)
+        
+        return regions
 
 
