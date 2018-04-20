@@ -93,8 +93,8 @@ class Agent(object):
         batch_images, _, _, _, _ = zip(*minibatch)
         batch_images = np.array(np.squeeze(batch_images, axis=1))
 
-        # cv2.imshow("batch", batch_images[0])
-        # cv2.waitKey(1)
+        cv2.imshow("batch", cv2.cvtColor(np.concatenate((*batch_images[:],), axis=1), cv2.COLOR_RGB2BGR))
+        cv2.waitKey(1)
         # region = RegionProposal()
         # region.test(batch_images)
         

@@ -27,8 +27,7 @@ class RegionProposal(object):
         averageMask = np.uint8(averageMask * 255)
         averageMask = np.clip(averageMask, 0, 255)
         averageMask = cv2.cvtColor(averageMask, cv2.COLOR_RGB2GRAY)
-        # cv2.imshow('mask', averageMask)
-        # cv2.waitKey(0)
+        
         return averageMask
 
     def BlobDetect(self, mask):
@@ -43,6 +42,30 @@ class RegionProposal(object):
         print("centres", len(centres))
         cv2.imshow('contours', mask)
         cv2.waitKey(0)
+
+    def ClampRegion(self, image, centers):
+        print("image.shape[-1:]", image.shape[-1:])
+        print("(len(centers),) + self.region_size + image.shape[-1:]", (len(centers),) + self.region_size + image.shape[-1:])
+        region = np.zeros((len(centers),) + self.region_size + image.shape[-1:])
+        for i, center in enumerate(centers):
+            xMin, xMax = center[0] - self.region_size[0], center[0] + self.region_size[0]
+            yMin, yMax = center[1] - self.region_size[1], center[1] + self.region_size[1]
+            # clamp the min and max
+            if xMin < 0:
+                xMax -= xMin
+                xMin = 0
+            if xMax > image.shape[0]:
+                xMin -= xMax-image.shape[0]
+                xMax = image.shape[0]
+            if yMin < 0:
+                yMax -= yMin
+                yMin = 0
+            if yMax > image.shape[1]:
+                yMin -= yMax-image.shape[1]
+                yMax = image.shape[1]
+            # crop the region
+            region[i] = image[xMin:xMax, yMin:yMax]
+        return region
 
     def test(self, inputImages):
         self.BlobDetect(self.GetMask(inputImages))
