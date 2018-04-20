@@ -100,14 +100,10 @@ class Agent(object):
         else:
             inputImage = np.squeeze(np.array([tileImage]*self.batchSize))
 
-<<<<<<< HEAD
             pred = self.vae.ae.predict(inputImage, batch_size=self.batchSize)
             return state, self.unprocessImage(pred)[0]
 
     def replay(self, regions=False):
-=======
-    def replay(self, step=1):
->>>>>>> 9491814d31988e466f15288072f3be85123bdec7
         # print("learning")
         # minibatch = random.sample(self.memory, self.batchSize)
         minibatch = itertools.islice(self.memory, self.batchSize, step)
@@ -187,11 +183,7 @@ if __name__ == '__main__':
     maxTime = 1000
     reward = 0
     done = False
-<<<<<<< HEAD
     usingRegions = True
-=======
-    step = 3
->>>>>>> 9491814d31988e466f15288072f3be85123bdec7
 
     for i in range(episode_count):
         ob = env.reset()
@@ -212,11 +204,7 @@ if __name__ == '__main__':
             if len(agent.memory) > agent.batchSize and time % (agent.batchSize*step) == 0:
                 print("episode: {}/{}, time: {}"
                       .format(i+1, episode_count, time))
-<<<<<<< HEAD
                 agent.replay(usingRegions)
-=======
-                agent.replay(step)
->>>>>>> 9491814d31988e466f15288072f3be85123bdec7
             
             if (done or time == sampleTime) and hasSampled == False:
                 # pred = Image.fromarray(agent.get_predict(ob))
