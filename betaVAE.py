@@ -100,13 +100,17 @@ class Agent(object):
         else:
             inputImage = np.squeeze(np.array([tileImage]*self.batchSize))
 
+<<<<<<< HEAD
             pred = self.vae.ae.predict(inputImage, batch_size=self.batchSize)
             return state, self.unprocessImage(pred)[0]
 
     def replay(self, regions=False):
+=======
+    def replay(self, step=1):
+>>>>>>> 9491814d31988e466f15288072f3be85123bdec7
         # print("learning")
         # minibatch = random.sample(self.memory, self.batchSize)
-        minibatch = itertools.islice(self.memory, self.batchSize)
+        minibatch = itertools.islice(self.memory, self.batchSize, step)
 
         batch_images, _, _, _, _ = zip(*minibatch)
         batch_images = np.array(np.squeeze(batch_images, axis=1))
@@ -146,13 +150,13 @@ if __name__ == '__main__':
     parser.add_argument('env_id', nargs='?', default='MontezumaRevenge-v0', help='Select the environment to run')
     args = parser.parse_args()
 
-    folder = os.path.join("save", "images_7")
+    folder = os.path.join("save", "images_8")
     # model - number - modelType - betaValue - latentSize - inputShape - episodes
-    loadFile = os.path.join("save", "images_7", "DarkNet19-7-None-0-1000l-128px-10000e")
-    saveFile = os.path.join(folder, "DarkNet19-7-None-0-1000l-128px-10000e")
+    loadFile = os.path.join("save", "images_8", "DarkNet19-8-None-0-1000l-128px-10000e-batchFix")
+    saveFile = os.path.join(folder, "DarkNet19-8-None-0-1000l-128px-10000e-batchFix")
 
-    load = False
-    save = False
+    load = True
+    save = True
 
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -183,7 +187,11 @@ if __name__ == '__main__':
     maxTime = 1000
     reward = 0
     done = False
+<<<<<<< HEAD
     usingRegions = True
+=======
+    step = 3
+>>>>>>> 9491814d31988e466f15288072f3be85123bdec7
 
     for i in range(episode_count):
         ob = env.reset()
@@ -201,10 +209,14 @@ if __name__ == '__main__':
 
             agent.remember(ob, action, reward, new_ob, done)
 
-            if len(agent.memory) > agent.batchSize and time % agent.batchSize == 0:
+            if len(agent.memory) > agent.batchSize and time % (agent.batchSize*step) == 0:
                 print("episode: {}/{}, time: {}"
                       .format(i+1, episode_count, time))
+<<<<<<< HEAD
                 agent.replay(usingRegions)
+=======
+                agent.replay(step)
+>>>>>>> 9491814d31988e466f15288072f3be85123bdec7
             
             if (done or time == sampleTime) and hasSampled == False:
                 # pred = Image.fromarray(agent.get_predict(ob))
