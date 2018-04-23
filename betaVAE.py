@@ -19,7 +19,7 @@ from PIL import Image
 
 sys.path.append("BVAE-tf/bvae")
 
-from models import Darknet19Encoder, Darknet19Decoder
+import models
 from ae import AutoEncoder
 
 from region import RegionProposal
@@ -36,18 +36,18 @@ class Agent(object):
     def __init__(self, action_space):
         self.state_shape = (210, 160, 3)
         self.model_shape = (32, 32, 3)
-        self.batchSize = 8
-        self.latentSize = 100
+        self.batchSize = 32
+        self.latentSize = 128
 
         self.action_space = action_space
         self.memory = deque(maxlen=2000)
 
-        encoder = Darknet19Encoder(self.model_shape, self.batchSize, self.latentSize, None)
-        decoder = Darknet19Decoder(self.model_shape, self.batchSize, self.latentSize)
+        encoder = models.BetaEncoder(self.model_shape, self.batchSize, self.latentSize, latentConstraints="bvae", beta=32, capacity=15)
+        decoder = models.BetaDecoder(self.model_shape, self.batchSize, self.latentSize)
         self.vae = AutoEncoder(encoder, decoder)
         self.vae.ae.compile(optimizer='adam', loss='mean_absolute_error')
 
-        self.regionLibrary = RegionProposal(input_size=(128, 128, 3), region_size=(32, 32), verbose=1)
+        self.regionLibrary = RegionProposal(input_size=(128, 128, 3), region_size=(32, 32), verbose=0)
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.appendleft((state, action, reward, next_state, done))
@@ -88,12 +88,17 @@ class Agent(object):
             preImage = self.processImage(preState)
             inputBatch = np.squeeze(np.array([tileImage, preImage]))
 
-            regions = self.regionLibrary.MotionRegions(inputBatch)
+            minibatch = itertools.islice(self.memory, self.batchSize)
+            batch_images, _, _, _, _ = zip(*minibatch)
+            batch_images = np.array(np.squeeze(batch_images, axis=1))
+            
+            regions = self.regionLibrary.MotionRegions(batch_images)
             regions = np.reshape(regions, (-1,)+regions.shape[-3:])
-            while regions.shape[0] % self.batchSize != 0:
-                print(regions.shape)
-                regions = np.concatenate((regions, regions[0:1]), axis=0)
-            print("get_pred.regions.shape", regions.shape)
+
+            # while regions.shape[0] % self.batchSize != 0:
+            #     print(regions.shape)
+            #     regions = np.concatenate((regions, regions[0:1]), axis=0)
+            # print("get_pred.regions.shape", regions.shape)
             
             pred = self.vae.ae.predict(regions, batch_size=self.batchSize)
             return regions, self.unprocessImage(pred)
@@ -133,10 +138,10 @@ class Agent(object):
         self.vae.ae.save_weights(name)
         pass
 
-def convertImage(image):
+def convertImage(image, size=(128, 128)):
     uint8Image = np.array(image, dtype=np.uint8)
     pilImage = Image.fromarray(uint8Image)
-    resizedImage = pilImage.resize((128, 128), resample=Image.LANCZOS)
+    resizedImage = pilImage.resize(size, resample=Image.LANCZOS)
     numpyImage = np.array(resizedImage, dtype=np.uint8)
     return numpyImage
 
@@ -146,13 +151,14 @@ if __name__ == '__main__':
     parser.add_argument('env_id', nargs='?', default='MontezumaRevenge-v0', help='Select the environment to run')
     args = parser.parse_args()
 
-    folder = os.path.join("save", "images_8")
-    # model - number - modelType - betaValue - latentSize - inputShape - episodes
-    loadFile = os.path.join("save", "images_8", "DarkNet19-8-None-0-1000l-128px-10000e-batchFix")
-    saveFile = os.path.join(folder, "DarkNet19-8-None-0-1000l-128px-10000e-batchFix")
+    folder = os.path.join("save", "images_15")
+    # model - number - modelType - betaValue - latentSize - capacity - inputShape - episodes
+    # BetaVaePooless, DarkNet19, StrideDarkNet19, ResDarkNet19
+    loadFile = os.path.join("save",  "PtBetaEncoder-32px-128l-1000e")
+    saveFile = os.path.join(folder, "PtBetaEncoder-15-bvae-32-128l-15c-32px-1000e-regions")
 
-    load = False
-    save = False
+    load = True
+    save = True
 
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -179,7 +185,7 @@ if __name__ == '__main__':
     # writer = tf.summary.FileWriter('log')
     # writer.add_graph(tf.get_default_graph())
 
-    episode_count = 10000
+    episode_count = 1000
     maxTime = 1000
     reward = 0
     done = False
