@@ -33,7 +33,7 @@ from keras.optimizers import Adam
 import cv2
 
 class Agent(object):
-    def __init__(self, action_space, model_shape=(128, 128, 3), batch_size=64, latent_size=128, latentConstraints="bvae", beta=128, capacity=32):
+    def __init__(self, action_space, model_shape=(128, 128, 3), batch_size=16, latent_size=128, latentConstraints="bvae", beta=128, capacity=32):
         self.model_shape = model_shape
         self.batchSize = batch_size
         self.latentSize = latent_size
@@ -41,8 +41,8 @@ class Agent(object):
         self.action_space = action_space
         self.memory = deque(maxlen=2000)
 
-        encoder = models.Darknet19Encoder(self.model_shape, self.batchSize, self.latentSize, latentConstraints="bvae", beta=128, capacity=32)
-        decoder = models.Darknet19Decoder(self.model_shape, self.batchSize, self.latentSize)
+        encoder = models.BetaEncoder(self.model_shape, self.batchSize, self.latentSize, latentConstraints="bvae", beta=128, capacity=32)
+        decoder = models.BetaDecoder(self.model_shape, self.batchSize, self.latentSize)
         self.vae = AutoEncoder(encoder, decoder)
         self.vae.ae.compile(optimizer='adam', loss='mean_absolute_error')
 
@@ -133,7 +133,7 @@ class Agent(object):
             self.train(regions)
         else:
             pred = self.train(batch_images, True)
-            return batch_images, pred
+            return batch_images, self.unprocessImage(pred)
     
     def load(self, name):
         # TODO: Implement this
@@ -163,11 +163,11 @@ if __name__ == '__main__':
     parser.add_argument('env_id', nargs='?', default='MontezumaRevenge-v0', help='Select the environment to run')
     args = parser.parse_args()
 
-    folder = os.path.join("save", "images_18_1")
+    folder = os.path.join("save", "images_17_1")
     # model - number - modelType - betaValue - latentSize - capacity - inputShape - episodes - regions/whole
     # BetaVaePooless, DarkNet19, StrideDarkNet19, ResDarkNet19
     loadFile = os.path.join("save",  "PtBetaEncoder-bvae-64-128l-32c-32px-10000e")
-    saveFile = os.path.join(folder, "DarkNet19-18-bvae-128-128l-32c-128px-1000e-whole")
+    saveFile = os.path.join(folder, "BetaEncoder-17-bvae-128-128l-32c-128px-1000e-whole")
 
     load = False
     save = True
@@ -225,8 +225,24 @@ if __name__ == '__main__':
                 print("episode: {}/{}, time: {}".format(i+1, episode_count, time))
                 batch, pred = agent.replay(usingRegions)
                 diff = differenceImageV6(batch, pred)
+
                 diffAgent.rememberBatch(diff, action, reward, new_ob, done)
-                diffAgent.replay(False)
+                agentDiff, diffPred = diffAgent.replay(False)
+
+                # print("batch.shape", batch.shape, "dtype", batch.dtype)
+                # print("pred.shape", pred.shape, "dtype", pred.dtype)
+                # print("diff.shape", diff.shape, "dtype", diff.dtype)
+                # print("diffPred.shape", diffPred.shape, "dtype", diffPred.dtype)
+                batch_vis = np.concatenate((*batch,), axis=1)
+                pred_vis = np.concatenate((*pred,), axis=1)
+                diff_vis = np.concatenate((*diff,), axis=1)
+                diffPred_vis = np.concatenate((*diffPred,), axis=1)
+
+                visualize = np.concatenate((batch_vis, pred_vis, diff_vis, diffPred_vis), axis=0)
+                # print("visualize.shape", visualize.shape, "dtype", visualize.dtype)
+                cvPred = cv2.cvtColor(visualize, cv2.COLOR_RGB2BGR)
+                cv2.imshow("train", cvPred)
+                cv2.waitKey(1)
             
             if (done or time == sampleTime) and hasSampled == False:
                 # pred = Image.fromarray(agent.get_predict(ob))
@@ -241,6 +257,7 @@ if __name__ == '__main__':
                     diff = differenceImageV6(state, pred)
                     _, diffPred = diffAgent.get_predict(diff)
                     state = np.squeeze(state)
+                    diff = np.squeeze(diff)
                     visualize = np.concatenate((state, pred, diff, diffPred), axis=1)
                 
                 cvPred = cv2.cvtColor(visualize, cv2.COLOR_RGB2BGR)
