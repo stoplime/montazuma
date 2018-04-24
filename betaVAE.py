@@ -33,17 +33,16 @@ from keras.optimizers import Adam
 import cv2
 
 class Agent(object):
-    def __init__(self, action_space):
-        self.state_shape = (210, 160, 3)
-        self.model_shape = (32, 32, 3)
-        self.batchSize = 32
-        self.latentSize = 128
+    def __init__(self, action_space, model_shape=(128, 128, 3), batch_size=64, latent_size=128, latentConstraints="bvae", beta=128, capacity=32):
+        self.model_shape = model_shape
+        self.batchSize = batch_size
+        self.latentSize = latent_size
 
         self.action_space = action_space
         self.memory = deque(maxlen=2000)
 
-        encoder = models.BetaEncoder(self.model_shape, self.batchSize, self.latentSize, latentConstraints="bvae", beta=32, capacity=15)
-        decoder = models.BetaDecoder(self.model_shape, self.batchSize, self.latentSize)
+        encoder = models.Darknet19Encoder(self.model_shape, self.batchSize, self.latentSize, latentConstraints="bvae", beta=128, capacity=32)
+        decoder = models.Darknet19Decoder(self.model_shape, self.batchSize, self.latentSize)
         self.vae = AutoEncoder(encoder, decoder)
         self.vae.ae.compile(optimizer='adam', loss='mean_absolute_error')
 
@@ -51,6 +50,10 @@ class Agent(object):
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.appendleft((state, action, reward, next_state, done))
+
+    def rememberBatch(self, states, action, reward, next_state, done):
+        for i, state in enumerate(states):
+            self.memory.appendleft((state, action, reward, next_state, done))
 
     def processImage(self, state):
         batch = np.float32(state)/255 - 0.5
@@ -72,12 +75,15 @@ class Agent(object):
         # # print(np.argmax(act_values[0]))
         # return np.argmax(act_values[0])
 
-    def train(self, batch_images):
+    def train(self, batch_images, returnPred=False):
         batch_images = self.processImage(batch_images)
 
         self.vae.ae.fit(batch_images, batch_images,
                     epochs=1,
                     batch_size=self.batchSize)
+        if returnPred:
+            return self.vae.ae.predict(batch_images, batch_size=self.batchSize)
+        return None
     
     def get_latent(self, state):
         return self.vae.encoder.predict(self.processImage(state))
@@ -126,7 +132,8 @@ class Agent(object):
         
             self.train(regions)
         else:
-            self.train(batch_images)
+            pred = self.train(batch_images, True)
+            return batch_images, pred
     
     def load(self, name):
         # TODO: Implement this
@@ -145,19 +152,24 @@ def convertImage(image, size=(128, 128)):
     numpyImage = np.array(resizedImage, dtype=np.uint8)
     return numpyImage
 
+def differenceImageV6(img1, img2):
+  a = img1-img2
+  b = np.uint8(img1<img2) * 254 + 1
+  return a * b
+
 if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description=None)
     parser.add_argument('env_id', nargs='?', default='MontezumaRevenge-v0', help='Select the environment to run')
     args = parser.parse_args()
 
-    folder = os.path.join("save", "images_15")
-    # model - number - modelType - betaValue - latentSize - capacity - inputShape - episodes
+    folder = os.path.join("save", "images_18_1")
+    # model - number - modelType - betaValue - latentSize - capacity - inputShape - episodes - regions/whole
     # BetaVaePooless, DarkNet19, StrideDarkNet19, ResDarkNet19
-    loadFile = os.path.join("save",  "PtBetaEncoder-32px-128l-1000e")
-    saveFile = os.path.join(folder, "PtBetaEncoder-15-bvae-32-128l-15c-32px-1000e-regions")
+    loadFile = os.path.join("save",  "PtBetaEncoder-bvae-64-128l-32c-32px-10000e")
+    saveFile = os.path.join(folder, "DarkNet19-18-bvae-128-128l-32c-128px-1000e-whole")
 
-    load = True
+    load = False
     save = True
 
     if not os.path.exists(folder):
@@ -181,6 +193,8 @@ if __name__ == '__main__':
     agent = Agent(env.action_space)
     if load:
         agent.load(loadFile+".h5")
+    
+    diffAgent = Agent(env.action_space)
 
     # writer = tf.summary.FileWriter('log')
     # writer.add_graph(tf.get_default_graph())
@@ -189,7 +203,7 @@ if __name__ == '__main__':
     maxTime = 1000
     reward = 0
     done = False
-    usingRegions = True
+    usingRegions = False
 
     for i in range(episode_count):
         ob = env.reset()
@@ -208,9 +222,11 @@ if __name__ == '__main__':
             agent.remember(ob, action, reward, new_ob, done)
 
             if len(agent.memory) > agent.batchSize and time % agent.batchSize == 0:
-                print("episode: {}/{}, time: {}"
-                      .format(i+1, episode_count, time))
-                agent.replay(usingRegions)
+                print("episode: {}/{}, time: {}".format(i+1, episode_count, time))
+                batch, pred = agent.replay(usingRegions)
+                diff = differenceImageV6(batch, pred)
+                diffAgent.rememberBatch(diff, action, reward, new_ob, done)
+                diffAgent.replay(False)
             
             if (done or time == sampleTime) and hasSampled == False:
                 # pred = Image.fromarray(agent.get_predict(ob))
@@ -222,7 +238,10 @@ if __name__ == '__main__':
                     visualize = np.concatenate((stateVisualize, visualize), axis=0)
                 else:
                     state, pred = agent.get_predict(ob)
-                    visualize = np.concatenate((np.squeeze(state), pred), axis=1)
+                    diff = differenceImageV6(state, pred)
+                    _, diffPred = diffAgent.get_predict(diff)
+                    state = np.squeeze(state)
+                    visualize = np.concatenate((state, pred, diff, diffPred), axis=1)
                 
                 cvPred = cv2.cvtColor(visualize, cv2.COLOR_RGB2BGR)
                 cv2.imwrite(os.path.join(folder, "sample_{}.png".format(str(i).zfill(4))), cvPred)
@@ -236,9 +255,13 @@ if __name__ == '__main__':
                 print("episode: {}/{}, time: {}"
                       .format(i+1, episode_count, time))
                 if len(agent.memory) > agent.batchSize:
-                    agent.replay(usingRegions)
+                    batch, pred = agent.replay(usingRegions)
+                    diff = differenceImageV6(batch, pred)
+                    diffAgent.rememberBatch(diff, action, reward, new_ob, done)
+                    diffAgent.replay(False)
                 if save:
                     agent.save(saveFile+".h5")
+                    diffAgent.save(saveFile+"-Diff.h5")
                 break
 
     # Close the env and write monitor result info to disk
