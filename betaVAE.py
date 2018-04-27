@@ -33,7 +33,7 @@ from keras.optimizers import Adam
 import cv2
 
 class Agent(object):
-    def __init__(self, action_space, model_shape=(128, 128, 3), batch_size=16, latent_size=128, latentConstraints="bvae", beta=128, capacity=32):
+    def __init__(self, action_space, encoderArchitecture=models.Darknet19Encoder, decoderArchitecture=models.Darknet19Decoder, model_shape=(128, 128, 3), batch_size=32, latent_size=128, latentConstraints="bvae", beta=128, capacity=32):
         self.model_shape = model_shape
         self.batchSize = batch_size
         self.latentSize = latent_size
@@ -41,8 +41,8 @@ class Agent(object):
         self.action_space = action_space
         self.memory = deque(maxlen=2000)
 
-        encoder = models.BetaEncoder(self.model_shape, self.batchSize, self.latentSize, latentConstraints="bvae", beta=128, capacity=32)
-        decoder = models.BetaDecoder(self.model_shape, self.batchSize, self.latentSize)
+        encoder = encoderArchitecture(self.model_shape, self.batchSize, self.latentSize, latentConstraints=latentConstraints, beta=beta, capacity=capacity)
+        decoder = decoderArchitecture(self.model_shape, self.batchSize, self.latentSize)
         self.vae = AutoEncoder(encoder, decoder)
         self.vae.ae.compile(optimizer='adam', loss='mean_absolute_error')
 
@@ -101,10 +101,10 @@ class Agent(object):
             regions = self.regionLibrary.MotionRegions(batch_images)
             regions = np.reshape(regions, (-1,)+regions.shape[-3:])
 
-            # while regions.shape[0] % self.batchSize != 0:
-            #     print(regions.shape)
-            #     regions = np.concatenate((regions, regions[0:1]), axis=0)
-            # print("get_pred.regions.shape", regions.shape)
+            while regions.shape[0] % self.batchSize != 0:
+                print(regions.shape)
+                regions = np.concatenate((regions, regions[0:1]), axis=0)
+            print("get_pred.regions.shape", regions.shape)
             
             pred = self.vae.ae.predict(regions, batch_size=self.batchSize)
             return regions, self.unprocessImage(pred)
@@ -147,6 +147,15 @@ class Agent(object):
 
 def convertImage(image, size=(128, 128)):
     uint8Image = np.array(image, dtype=np.uint8)
+    if uint8Image.ndim > 3:
+        imgs = []
+        for i in range(uint8Image.shape[0]):
+            img = uint8Image[i]
+            pilImage = Image.fromarray(img)
+            resizedImage = pilImage.resize(size, resample=Image.NEAREST)
+            numpyImage = np.array(resizedImage, dtype=np.uint8)
+            imgs.append(numpyImage)
+        return np.array(imgs, dtype=np.uint8)
     pilImage = Image.fromarray(uint8Image)
     resizedImage = pilImage.resize(size, resample=Image.LANCZOS)
     numpyImage = np.array(resizedImage, dtype=np.uint8)
@@ -163,14 +172,21 @@ if __name__ == '__main__':
     parser.add_argument('env_id', nargs='?', default='MontezumaRevenge-v0', help='Select the environment to run')
     args = parser.parse_args()
 
-    folder = os.path.join("save", "images_17_1")
+    folder = os.path.join("save", "images_21")
     # model - number - modelType - betaValue - latentSize - capacity - inputShape - episodes - regions/whole
     # BetaVaePooless, DarkNet19, StrideDarkNet19, ResDarkNet19
-    loadFile = os.path.join("save",  "PtBetaEncoder-bvae-64-128l-32c-32px-10000e")
-    saveFile = os.path.join(folder, "BetaEncoder-17-bvae-128-128l-32c-128px-1000e-whole")
+    loadFile = os.path.join("save", "images_17", "BetaEncoder-17-bvae-32-128l-32c-128px-1000e-whole")
+    loadFileAgent2 = os.path.join("save", "images_19", "DarkNet19-18-bvae-128-128l-32c-128px-1000e-whole")
+    saveFile = os.path.join(folder, "BetaEncoder-21-bvae-32-128l-32c-128px-1000e-whole")
+    saveFileAgent2 = os.path.join(folder, "BetaEncoder-21-bvae-32-128l-32c-32px-1000e-whole-Diff")
 
-    load = False
+    load = True
+    loadAgent2 = False
     save = True
+    saveAgent2 = True
+
+    Agent2 = True
+    shrinkAgent2 = True
 
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -190,11 +206,13 @@ if __name__ == '__main__':
     outdir = './tmp'
     # env = wrappers.Monitor(env, directory=outdir, force=True)
     env.seed(0)
-    agent = Agent(env.action_space)
+    agent = Agent(env.action_space, models.BetaEncoder, models.BetaDecoder, model_shape=(128, 128, 3), batch_size=32, latent_size=128, latentConstraints="bvae", beta=32, capacity=32)
     if load:
         agent.load(loadFile+".h5")
-    
-    diffAgent = Agent(env.action_space)
+    if Agent2:
+        diffAgent = Agent(env.action_space, models.BetaEncoder, models.BetaDecoder, model_shape=(32, 32, 3), batch_size=32, latent_size=128, latentConstraints="bvae", beta=32, capacity=32)
+        if loadAgent2:
+            diffAgent.load(loadFileAgent2+".h5")
 
     # writer = tf.summary.FileWriter('log')
     # writer.add_graph(tf.get_default_graph())
@@ -223,26 +241,31 @@ if __name__ == '__main__':
 
             if len(agent.memory) > agent.batchSize and time % agent.batchSize == 0:
                 print("episode: {}/{}, time: {}".format(i+1, episode_count, time))
-                batch, pred = agent.replay(usingRegions)
-                diff = differenceImageV6(batch, pred)
+                if Agent2:
+                    batch, pred = agent.replay(usingRegions)
+                    diff = differenceImageV6(batch, pred)
 
-                diffAgent.rememberBatch(diff, action, reward, new_ob, done)
-                agentDiff, diffPred = diffAgent.replay(False)
+                    if shrinkAgent2:
+                        diff = convertImage(diff, size=(32,32))
+                    
+                    diffAgent.rememberBatch(diff, action, reward, new_ob, done)
+                    agentDiff, diffPred = diffAgent.replay(False)
 
-                # print("batch.shape", batch.shape, "dtype", batch.dtype)
-                # print("pred.shape", pred.shape, "dtype", pred.dtype)
-                # print("diff.shape", diff.shape, "dtype", diff.dtype)
-                # print("diffPred.shape", diffPred.shape, "dtype", diffPred.dtype)
-                batch_vis = np.concatenate((*batch,), axis=1)
-                pred_vis = np.concatenate((*pred,), axis=1)
-                diff_vis = np.concatenate((*diff,), axis=1)
-                diffPred_vis = np.concatenate((*diffPred,), axis=1)
+                    if shrinkAgent2:
+                        diff = convertImage(diff, size=(128,128))
+                        diffPred = convertImage(diffPred, size=(128,128))
 
-                visualize = np.concatenate((batch_vis, pred_vis, diff_vis, diffPred_vis), axis=0)
-                # print("visualize.shape", visualize.shape, "dtype", visualize.dtype)
-                cvPred = cv2.cvtColor(visualize, cv2.COLOR_RGB2BGR)
-                cv2.imshow("train", cvPred)
-                cv2.waitKey(1)
+                    batch_vis = np.concatenate((*batch,), axis=1)
+                    pred_vis = np.concatenate((*pred,), axis=1)
+                    diff_vis = np.concatenate((*diff,), axis=1)
+                    diffPred_vis = np.concatenate((*diffPred,), axis=1)
+
+                    visualize = np.concatenate((batch_vis, pred_vis, diff_vis, diffPred_vis), axis=0)
+                    cvPred = cv2.cvtColor(visualize, cv2.COLOR_RGB2BGR)
+                    cv2.imshow("train", cvPred)
+                    cv2.waitKey(1)
+                else:
+                    agent.replay(usingRegions)
             
             if (done or time == sampleTime) and hasSampled == False:
                 # pred = Image.fromarray(agent.get_predict(ob))
@@ -255,10 +278,18 @@ if __name__ == '__main__':
                 else:
                     state, pred = agent.get_predict(ob)
                     diff = differenceImageV6(state, pred)
-                    _, diffPred = diffAgent.get_predict(diff)
                     state = np.squeeze(state)
-                    diff = np.squeeze(diff)
-                    visualize = np.concatenate((state, pred, diff, diffPred), axis=1)
+                    if Agent2:
+                        if shrinkAgent2:
+                            diff = convertImage(diff, size=(32,32))
+                        _, diffPred = diffAgent.get_predict(diff)
+                        if shrinkAgent2:
+                            diff = convertImage(diff, size=(128,128))
+                            diffPred = convertImage(diffPred, size=(128,128))
+                        diff = np.squeeze(diff)
+                        visualize = np.concatenate((state, pred, diff, diffPred), axis=1)
+                    else:
+                        visualize = np.concatenate((state, pred), axis=1)
                 
                 cvPred = cv2.cvtColor(visualize, cv2.COLOR_RGB2BGR)
                 cv2.imwrite(os.path.join(folder, "sample_{}.png".format(str(i).zfill(4))), cvPred)
@@ -272,13 +303,19 @@ if __name__ == '__main__':
                 print("episode: {}/{}, time: {}"
                       .format(i+1, episode_count, time))
                 if len(agent.memory) > agent.batchSize:
-                    batch, pred = agent.replay(usingRegions)
-                    diff = differenceImageV6(batch, pred)
-                    diffAgent.rememberBatch(diff, action, reward, new_ob, done)
-                    diffAgent.replay(False)
+                    if Agent2:
+                        batch, pred = agent.replay(usingRegions)
+                        diff = differenceImageV6(batch, pred)
+                        if shrinkAgent2:
+                            diff = convertImage(diff, size=(32,32))
+                        diffAgent.rememberBatch(diff, action, reward, new_ob, done)
+                        diffAgent.replay(False)
+                    else:
+                        agent.replay(usingRegions)
                 if save:
                     agent.save(saveFile+".h5")
-                    diffAgent.save(saveFile+"-Diff.h5")
+                    if Agent2 and saveAgent2:
+                        diffAgent.save(saveFileAgent2+".h5")
                 break
 
     # Close the env and write monitor result info to disk
