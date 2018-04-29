@@ -172,21 +172,21 @@ if __name__ == '__main__':
     parser.add_argument('env_id', nargs='?', default='MontezumaRevenge-v0', help='Select the environment to run')
     args = parser.parse_args()
 
-    folder = os.path.join("save", "images_21")
+    folder = os.path.join("save", "images_25_1")
     # model - number - modelType - betaValue - latentSize - capacity - inputShape - episodes - regions/whole
     # BetaVaePooless, DarkNet19, StrideDarkNet19, ResDarkNet19
-    loadFile = os.path.join("save", "images_17", "BetaEncoder-17-bvae-32-128l-32c-128px-1000e-whole")
-    loadFileAgent2 = os.path.join("save", "images_19", "DarkNet19-18-bvae-128-128l-32c-128px-1000e-whole")
-    saveFile = os.path.join(folder, "BetaEncoder-21-bvae-32-128l-32c-128px-1000e-whole")
-    saveFileAgent2 = os.path.join(folder, "BetaEncoder-21-bvae-32-128l-32c-32px-1000e-whole-Diff")
+    loadFile = os.path.join("save", "images_25", "BetaEncoder-25-bvae-0_1-128l-20c-128px-1000e-whole")
+    loadFileAgent2 = os.path.join("save", "BetaEncoder-25-bvae-0_1-20l-20c-128px-1000e-whole-Diff")
+    saveFile = os.path.join(folder, "BetaEncoder-25-bvae-0_1-128l-20c-128px-1000e-whole")
+    saveFileAgent2 = os.path.join(folder, "BetaEncoder-25-bvae-0_1-20l-20c-128px-1000e-whole-Diff")
 
     load = True
-    loadAgent2 = False
+    loadAgent2 = True
     save = True
     saveAgent2 = True
 
     Agent2 = True
-    shrinkAgent2 = True
+    shrinkAgent2 = False
 
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -206,11 +206,11 @@ if __name__ == '__main__':
     outdir = './tmp'
     # env = wrappers.Monitor(env, directory=outdir, force=True)
     env.seed(0)
-    agent = Agent(env.action_space, models.BetaEncoder, models.BetaDecoder, model_shape=(128, 128, 3), batch_size=32, latent_size=128, latentConstraints="bvae", beta=32, capacity=32)
+    agent = Agent(env.action_space, models.BetaEncoder, models.BetaDecoder, model_shape=(128, 128, 3), batch_size=32, latent_size=128, latentConstraints="bvae", beta=0.1, capacity=20)
     if load:
         agent.load(loadFile+".h5")
     if Agent2:
-        diffAgent = Agent(env.action_space, models.BetaEncoder, models.BetaDecoder, model_shape=(32, 32, 3), batch_size=32, latent_size=128, latentConstraints="bvae", beta=32, capacity=32)
+        diffAgent = Agent(env.action_space, models.BetaEncoder, models.BetaDecoder, model_shape=(128, 128, 3), batch_size=32, latent_size=20, latentConstraints="bvae", beta=0.1, capacity=20)
         if loadAgent2:
             diffAgent.load(loadFileAgent2+".h5")
 
@@ -218,7 +218,7 @@ if __name__ == '__main__':
     # writer.add_graph(tf.get_default_graph())
 
     episode_count = 1000
-    maxTime = 1000
+    maxTime = 10000
     reward = 0
     done = False
     usingRegions = False
